@@ -1,0 +1,15 @@
+# Vision
+opencv-python==4.8.1.78
+mediapipe==0.10.14
+protobuf==3.20.3
+numpy==1.26.4
+
+# Windows system control
+pywin32
+pycaw==20230407
+comtypes
+screen-brightness-control==0.22.0
+
+# Voice fallback (only needed if SAPI fails)
+vosk==0.3.45
+pyaudio
