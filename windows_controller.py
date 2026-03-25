@@ -64,6 +64,11 @@ class WindowsController:
         x, y = win32api.GetCursorPos()
         win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, x, y, 0, 0)
 
+    def scroll(self, amount: int):
+        """Scrolls the mouse wheel by the specified amount."""
+        x, y = win32api.GetCursorPos()
+        win32api.mouse_event(win32con.MOUSEEVENTF_WHEEL, x, y, amount, 0)
+
     def send_keys(self, keys: str):
         """Simulates key presses. Simple wrapper, can be expanded for complex combos."""
         # For simplicity in V1, we accept a few known shortcuts or single keys
@@ -170,3 +175,23 @@ class WindowsController:
     def lock_screen(self):
         """Lock the workstation."""
         ctypes.windll.user32.LockWorkStation()
+
+    # ── ADDED: System power methods ────────────────────────────────────────
+
+    def restart(self, countdown_seconds: int = 0):
+        """Initiate system restart."""
+        # /r = restart, /t = delay in seconds before executing
+        subprocess.Popen(
+            ["shutdown", "/r", "/t", str(countdown_seconds)],
+            creationflags=subprocess.CREATE_NO_WINDOW
+        )
+
+    def cancel_shutdown(self):
+        """Cancel any pending shutdown or restart scheduled via shutdown.exe."""
+        # /a = abort — works for both shutdown and restart
+        subprocess.Popen(
+            ["shutdown", "/a"],
+            creationflags=subprocess.CREATE_NO_WINDOW
+        )
+
+    # ── END ADDED ──────────────────────────────────────────────────────────
