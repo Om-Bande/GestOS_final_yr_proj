@@ -36,6 +36,20 @@ SMOOTH_ALPHA     = 0.35   # EMA for cursor (lower = smoother, more lag)
 VOICE_TTL        = 3.0    # seconds to show last voice command on screen
 WIN_W, WIN_H     = 320, 240
 
+# Camera dead zone — your hand never reaches the very edges of the frame.
+# These define the portion of the camera frame that maps to the full screen.
+# Tune these if the cursor still can't reach screen edges:
+#   - Run the app, print(lm[8].x, lm[8].y) while moving finger to each edge
+#   - Use those values here
+CAM_X_MIN = 0.15   # left edge of your comfortable hand range
+CAM_X_MAX = 0.85   # right edge
+CAM_Y_MIN = 0.05   # top edge
+CAM_Y_MAX = 0.80   # bottom edge
+
+# ── ADDED: Both-hand open palm gesture constant ────────────────────────────
+OPEN_PALM_HOLD_S = 2.0    # hold both hands open palm this long → shutdown/restart trigger
+# ── END ADDED ──────────────────────────────────────────────────────────────
+
 
 def _put(q: mp.Queue, action: str, params: dict = None):
     """Non-blocking put. Silently drops if queue is full."""
@@ -45,18 +59,29 @@ def _put(q: mp.Queue, action: str, params: dict = None):
         pass
 
 
+def _remap(value: float, in_min: float, in_max: float) -> float:
+    """
+    Remaps a value from [in_min, in_max] to [0.0, 1.0], clamped.
+    Used to map camera-space hand coords to full screen coords.
+    """
+    if in_max <= in_min:
+        return max(0.0, min(1.0, value))
+    return max(0.0, min(1.0, (value - in_min) / (in_max - in_min)))
+
+
 def vision_process_entry(
     intent_queue: mp.Queue,
     status_queue: mp.Queue,
     screen_w: int,
     screen_h: int,
+    sys_queue: mp.Queue = None,   # ADDED: receives countdown status from main for display
 ):
     if not MEDIAPIPE_OK:
         return
 
     hands = mp_lib.solutions.hands.Hands(
         static_image_mode=False,
-        max_num_hands=1,
+        max_num_hands=2,             # CHANGED: 2 hands needed for both-palm shutdown gesture
         model_complexity=0,          # Lite model — fastest inference
         min_detection_confidence=0.7,
         min_tracking_confidence=0.6,
@@ -93,6 +118,13 @@ def vision_process_entry(
     disp_voice   = ""
     last_voice_t = 0.0
 
+    # ── ADDED: Both-hand open palm state + countdown display ───────────────
+    both_palm_start_t: float | None = None  # when both-palm pose was first detected
+    both_palm_fired   = False               # True once shutdown_request is sent, rearms on release
+
+    countdown_text = ""   # text shown in center of frame e.g. "SHUTDOWN: 5"
+    # ── END ADDED ──────────────────────────────────────────────────────────
+
     print("[Vision] Started.")
 
     while True:
@@ -114,6 +146,16 @@ def vision_process_entry(
         if now - last_voice_t > VOICE_TTL:
             disp_voice = ""
 
+        # ── ADDED: Poll countdown status from main process ─────────────────
+        # main.py sends strings like "SHUTDOWN: 5" during countdown, or "" to clear
+        if sys_queue is not None:
+            try:
+                while not sys_queue.empty():
+                    countdown_text = sys_queue.get_nowait()
+            except Exception:
+                pass
+        # ── END ADDED ──────────────────────────────────────────────────────
+
         # ── MediaPipe inference ────────────────────────────────────────────
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         rgb.flags.writeable = False
@@ -132,7 +174,7 @@ def vision_process_entry(
             middle_up = lm[12].y < lm[10].y
             ring_up   = lm[16].y < lm[14].y
             pinky_up  = lm[20].y < lm[18].y
-            is_pinch  = math.hypot(lm[4].x - lm[8].x, lm[4].y - lm[8].y) < PINCH_DIST
+            is_pinch  = math.hypot(lm[4].x - lm[5].x, lm[4].y - lm[5].y) < PINCH_DIST
 
             # ── Classify gesture (priority order matters) ──────────────────
             if index_up and middle_up and ring_up:
@@ -189,14 +231,14 @@ def vision_process_entry(
                     held = now - pinch_start_t
                     if not dragging and held >= DRAG_HOLD_S:
                         dragging = True
-                        sx = int((pinch_start_xy[0]) * screen_w)
-                        sy = int(pinch_start_xy[1] * screen_h)
+                        sx = int(_remap(pinch_start_xy[0], CAM_X_MIN, CAM_X_MAX) * screen_w)
+                        sy = int(_remap(pinch_start_xy[1], CAM_Y_MIN, CAM_Y_MAX) * screen_h)
                         _put(intent_queue, "drag_start", {"x": sx, "y": sy})
                     if dragging and now - last_track_t >= TRACK_INTERVAL:
                         last_track_t = now
                         _put(intent_queue, "drag_move", {
-                            "x": int((lm[8].x) * screen_w),
-                            "y": int(lm[8].y * screen_h),
+                            "x": int(_remap(lm[8].x, CAM_X_MIN, CAM_X_MAX) * screen_w),
+                            "y": int(_remap(lm[8].y, CAM_Y_MIN, CAM_Y_MAX) * screen_h),
                         })
 
             elif gesture == "TWO_FINGER":
@@ -209,8 +251,8 @@ def vision_process_entry(
             elif gesture == "POINT":
                 if now - last_track_t >= TRACK_INTERVAL:
                     last_track_t = now
-                    raw_x = lm[8].x
-                    raw_y = lm[8].y
+                    raw_x = _remap(lm[8].x, CAM_X_MIN, CAM_X_MAX)
+                    raw_y = _remap(lm[8].y, CAM_Y_MIN, CAM_Y_MAX)
                     if smooth_xy is None:
                         smooth_xy = (raw_x, raw_y)
                     px, py = smooth_xy
@@ -233,6 +275,41 @@ def vision_process_entry(
             two_finger_fired   = False
             gesture            = ""
 
+        # ── ADDED: Both-hand open palm detection (shutdown/restart trigger) ──
+        # Runs independently of single-hand gesture logic above.
+        # Requires BOTH hands visible and ALL fingers up on each hand.
+        # Hold for OPEN_PALM_HOLD_S (2s) → sends shutdown_request to main.
+        # Re-arms once hands are lowered (both_palm_fired resets on no-detection).
+
+        both_palms_detected = False
+        if results.multi_hand_landmarks and len(results.multi_hand_landmarks) == 2:
+            all_open = True
+            for hand_lm in results.multi_hand_landmarks:
+                lm_p = hand_lm.landmark
+                # Check all 4 fingers extended (tip Y < pip Y = finger is up)
+                fingers_up = (
+                    lm_p[8].y  < lm_p[6].y  and   # index
+                    lm_p[12].y < lm_p[10].y and   # middle
+                    lm_p[16].y < lm_p[14].y and   # ring
+                    lm_p[20].y < lm_p[18].y        # pinky
+                )
+                if not fingers_up:
+                    all_open = False
+                    break
+            both_palms_detected = all_open
+
+        if both_palms_detected:
+            if both_palm_start_t is None:
+                both_palm_start_t = now   # start timing the hold
+            elif not both_palm_fired and (now - both_palm_start_t) >= OPEN_PALM_HOLD_S:
+                _put(intent_queue, "shutdown_request")   # send trigger to main
+                both_palm_fired = True
+        else:
+            # Hands lowered or not both open — reset so gesture can fire again
+            both_palm_start_t = None
+            both_palm_fired   = False
+        # ── END ADDED ──────────────────────────────────────────────────────
+
         # ── Draw overlay on frame ──────────────────────────────────────────
         disp_gesture = gesture if gesture not in ("IDLE", "") else ""
 
@@ -240,6 +317,21 @@ def vision_process_entry(
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 80), 2, cv2.LINE_AA)
         cv2.putText(frame, f"V: {disp_voice}", (10, 60),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 200, 255), 2, cv2.LINE_AA)
+
+        # ── ADDED: Countdown overlay (big red text center frame) ───────────
+        # countdown_text is set by sys_queue messages from main.py
+        # e.g. "SHUTDOWN: 5" or "RESTART: 3" or "" to clear
+        if countdown_text:
+            h, w = frame.shape[:2]
+            # Draw a dark semi-transparent bar behind the text for readability
+            text_size = cv2.getTextSize(countdown_text, cv2.FONT_HERSHEY_DUPLEX, 1.4, 3)[0]
+            tx = (w - text_size[0]) // 2
+            ty = h // 2
+            cv2.rectangle(frame, (tx - 10, ty - text_size[1] - 10),
+                          (tx + text_size[0] + 10, ty + 10), (0, 0, 0), -1)
+            cv2.putText(frame, countdown_text, (tx, ty),
+                        cv2.FONT_HERSHEY_DUPLEX, 1.4, (0, 0, 255), 3, cv2.LINE_AA)
+        # ── END ADDED ──────────────────────────────────────────────────────
 
         small = cv2.resize(frame, (WIN_W, WIN_H))
         cv2.imshow(WIN, small)
