@@ -56,6 +56,45 @@ COMMAND_MAP: dict[str, tuple[str, dict]] = {
     # Editing
     "copy":                     ("copy",           {}),
     "paste":                    ("paste",          {}),
+
+    # ── ADDED: Open applications ───────────────────────────────────────────
+    # To add a new app: add one line here + one entry in app_manager.APP_MAP
+    "open brave":               ("open_app",       {"app": "brave"}),
+    "open ea":                  ("open_app",       {"app": "ea"}),
+    "open epic games":          ("open_app",       {"app": "epic games"}),
+    "open excel":               ("open_app",       {"app": "excel"}),
+    "open files":               ("open_app",       {"app": "files"}),
+    "open chrome":              ("open_app",       {"app": "chrome"}),
+    "open powerpoint":          ("open_app",       {"app": "powerpoint"}),
+    "open spotify":             ("open_app",       {"app": "spotify"}),
+    "open steam":               ("open_app",       {"app": "steam"}),
+    "open vs code":             ("open_app",       {"app": "vscode"}),
+    "open word":                ("open_app",       {"app": "word"}),
+    "open notepad":             ("open_app",       {"app": "notepad"}),
+    "open terminal":            ("open_app",       {"app": "terminal"}),
+    "open camera":              ("open_app",       {"app": "camera"}),
+    "open whatsapp":            ("open_app",       {"app": "whatsapp"}),
+
+    # ── ADDED: Close applications (kills all instances) ────────────────────
+    "close brave":              ("close_app",      {"app": "brave"}),
+    "close ea":                 ("close_app",      {"app": "ea"}),
+    "close epic games":         ("close_app",      {"app": "epic games"}),
+    "close excel":              ("close_app",      {"app": "excel"}),
+    "close chrome":             ("close_app",      {"app": "chrome"}),
+    "close powerpoint":         ("close_app",      {"app": "powerpoint"}),
+    "close spotify":            ("close_app",      {"app": "spotify"}),
+    "close steam":              ("close_app",      {"app": "steam"}),
+    "close vs code":            ("close_app",      {"app": "vscode"}),
+    "close word":               ("close_app",      {"app": "word"}),
+    "close notepad":            ("close_app",      {"app": "notepad"}),
+    "close terminal":           ("close_app",      {"app": "terminal"}),
+    "close whatsapp":           ("close_app",      {"app": "whatsapp"}),
+
+    # ── ADDED: Close foreground window ─────────────────────────────────────
+    # Closes whatever window is currently active — safer than killing process
+    "close tab":                ("close_window",   {}),
+    "close window":             ("close_window",   {}),
+    # ── END ADDED ──────────────────────────────────────────────────────────
 }
 
 
