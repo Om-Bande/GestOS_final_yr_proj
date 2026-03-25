@@ -13,6 +13,8 @@ import win32con
 from windows_controller import WindowsController, MouseButton
 from vision_process import vision_process_entry
 from voice_process import voice_process_entry
+# ADDED: app manager for open/close application commands
+from app_manager import open_app, close_app, close_foreground_window
 
 
 def execute(controller: WindowsController, action: str, params: dict):
@@ -36,9 +38,9 @@ def execute(controller: WindowsController, action: str, params: dict):
         controller.end_drag()
 
     elif action == "scroll_up":
-        win32api.mouse_event(win32con.MOUSEEVENTF_WHEEL, 0, 0, 120, 0)
+        controller.scroll(120)
     elif action == "scroll_down":
-        win32api.mouse_event(win32con.MOUSEEVENTF_WHEEL, 0, 0, -120, 0)
+        controller.scroll(-120)
 
     elif action == "volume_up":
         controller.adjust_volume(10)
@@ -60,6 +62,17 @@ def execute(controller: WindowsController, action: str, params: dict):
         controller.send_keys("ctrl+c")
     elif action == "paste":
         controller.send_keys("ctrl+v")
+
+    # ── ADDED: App open/close handlers ────────────────────────────────────
+    elif action == "open_app":
+        open_app(params.get("app", ""))
+
+    elif action == "close_app":
+        close_app(params.get("app", ""))
+
+    elif action == "close_window":
+        close_foreground_window()
+    # ── END ADDED ──────────────────────────────────────────────────────────
 
 
 def main():
