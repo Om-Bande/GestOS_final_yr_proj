@@ -1,15 +1,28 @@
-# Vision
+# ── Core vision ───────────────────────────────────────────────────────────
 opencv-python==4.8.1.78
-mediapipe==0.10.14
-protobuf==3.20.3
+mediapipe==0.10.14          # 0.10.32 had protobuf conflicts; pin to known-good
+protobuf>=4.25.3,<5         # Required by mediapipe 0.10.14
 numpy==1.26.4
 
-# Windows system control
-pywin32
-pycaw==20230407
-comtypes
+# ── Windows system control ────────────────────────────────────────────────
+pywin32                     # win32api, win32con, win32gui + COM (pythoncom, win32com)
+pycaw==20230407             # Audio endpoint volume
+comtypes                    # Required by pycaw
 screen-brightness-control==0.22.0
+psutil                      # Used in app_manager.py for managing processes
 
-# Voice fallback (only needed if SAPI fails)
-vosk==0.3.45
-pyaudio
+# ── UI ────────────────────────────────────────────────────────────────────
+PyQt5==5.15.9
+
+# ── Voice — primary (Windows SAPI via pywin32, no extra install needed) ───
+# Windows Speech API is accessed through win32com.client which ships with pywin32.
+# No additional package required. Just ensure Windows Speech Recognition is set up:
+#   Settings → Time & Language → Speech → Microphone setup
+
+# ── Voice — fallback (Vosk, for non-Windows / CI / dev testing) ───────────
+vosk==0.3.45                # Used only when SAPI unavailable
+pyaudio                     # Audio stream for Vosk fallback
+
+# ── Dev / test ────────────────────────────────────────────────────────────
+pytest==7.4.4
+pytest-cov==4.1.0
