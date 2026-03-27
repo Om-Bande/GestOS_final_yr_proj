@@ -90,7 +90,9 @@ class WindowsController:
             'space': win32con.VK_SPACE,
             'enter': win32con.VK_RETURN,
             'esc': win32con.VK_ESCAPE,
-            'f11': win32con.VK_F11  # For fullscreen
+            'f11': win32con.VK_F11,  # For fullscreen
+            'tab': win32con.VK_TAB,
+            'win': win32con.VK_LWIN,
         }
         
         for p in parts:
@@ -188,10 +190,111 @@ class WindowsController:
 
     def cancel_shutdown(self):
         """Cancel any pending shutdown or restart scheduled via shutdown.exe."""
-        # /a = abort — works for both shutdown and restart
         subprocess.Popen(
             ["shutdown", "/a"],
             creationflags=subprocess.CREATE_NO_WINDOW
         )
+
+    # ── ADDED: VLC, WiFi, Bluetooth, Night Mode, Sleep ────────────────────
+
+    def send_vlc_command(self, key: str):
+        """
+        Finds the VLC window, brings it to foreground, sends a keypress,
+        then returns focus to the previously active window.
+        key: single char or VLC hotkey e.g. ' ' (space=play/pause), 'n', 'p', 's'
+        """
+        try:
+            prev_hwnd = win32gui.GetForegroundWindow()
+            vlc_hwnd  = None
+
+            def _find_vlc(hwnd, _):
+                nonlocal vlc_hwnd
+                if win32gui.IsWindowVisible(hwnd):
+                    title = win32gui.GetWindowText(hwnd).lower()
+                    if "vlc" in title:
+                        vlc_hwnd = hwnd
+            win32gui.EnumWindows(_find_vlc, None)
+
+            if not vlc_hwnd:
+                print("[WinCtrl] VLC window not found. Is VLC open?")
+                return
+
+            # Bring VLC to front, send key, restore previous window
+            win32gui.SetForegroundWindow(vlc_hwnd)
+            time.sleep(0.05)   # small delay so VLC registers focus
+            vk = ord(key.upper()) if len(key) == 1 else win32con.VK_SPACE
+            win32api.keybd_event(vk, 0, 0, 0)
+            win32api.keybd_event(vk, 0, win32con.KEYEVENTF_KEYUP, 0)
+            time.sleep(0.05)
+            if prev_hwnd:
+                win32gui.SetForegroundWindow(prev_hwnd)
+            print(f"[WinCtrl] VLC command sent: '{key}'")
+        except Exception as e:
+            print(f"[WinCtrl] send_vlc_command error: {e}")
+
+    def toggle_wifi(self, enable: bool):
+        """Enable or disable Wi-Fi adapter via netsh."""
+        state = "enable" if enable else "disable"
+        cmd   = f'netsh interface set interface "Wi-Fi" {state}'
+        subprocess.Popen(
+            ["netsh", "interface", "set", "interface", "Wi-Fi", state],
+            creationflags=subprocess.CREATE_NO_WINDOW
+        )
+        print(f"[WinCtrl] WiFi {state}d")
+
+    def toggle_bluetooth(self, enable: bool):
+        """Enable or disable Bluetooth via PowerShell radio API."""
+        # Uses Windows.Devices.Radios API — works on Win10/11 without extra drivers
+        state  = "true" if enable else "false"
+        script = (
+            "Add-Type -AssemblyName System.Runtime.WindowsRuntime; "
+            "$asTask = [System.WindowsRuntimeSystemExtensions].GetMethod('AsTask', "
+            "  [System.Type[]]@([Windows.Foundation.IAsyncOperation[Windows.Devices.Radios.Radio]])); "
+            "$radios = $asTask.Invoke($null, @([Windows.Devices.Radios.Radio]::GetRadiosAsync())) | "
+            "  ForEach-Object { $_.Result }; "
+            "$bt = $radios | Where-Object { $_.Kind -eq 'Bluetooth' }; "
+            f"if ($bt) {{ $bt.SetStateAsync([Windows.Devices.Radios.RadioState]::{('On' if enable else 'Off')}) }}"
+        )
+        subprocess.Popen(
+            ["powershell", "-Command", script],
+            creationflags=subprocess.CREATE_NO_WINDOW
+        )
+        print(f"[WinCtrl] Bluetooth {'enabled' if enable else 'disabled'}")
+
+    def toggle_night_mode(self, enable: bool):
+        """Toggle Windows Night Light (blue light filter) via registry."""
+        import winreg
+        # Night light state is stored in this registry key
+        key_path = r"Software\Microsoft\Windows\CurrentVersion\CloudStore\Store\DefaultAccount\Current\default$windows.data.bluelightreduction.bluelightreductionstate\windows.data.bluelightreduction.bluelightreductionstate"
+        try:
+            # Simpler approach: toggle via the Settings URI and SendKeys
+            # Direct registry edit is complex (binary blob). Use Settings shortcut instead.
+            # Open Action Center and toggle — but that's fragile.
+            # Best reliable method: PowerShell with WinRT API
+            script = (
+                "Add-Type -AssemblyName System.Runtime.WindowsRuntime; "
+                "$key = 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\CloudStore\\Store\\DefaultAccount\\Current\\default$windows.data.bluelightreduction.bluelightreductionstate\\windows.data.bluelightreduction.bluelightreductionstate'; "
+                "$val = (Get-ItemProperty -Path $key -Name 'Data' -ErrorAction SilentlyContinue).Data; "
+                "if ($val) { "
+                f"  $val[18] = {23 if enable else 19}; "
+                "  Set-ItemProperty -Path $key -Name 'Data' -Value $val; "
+                "  Stop-Process -Name 'ShellExperienceHost' -Force -ErrorAction SilentlyContinue "
+                "}"
+            )
+            subprocess.Popen(
+                ["powershell", "-Command", script],
+                creationflags=subprocess.CREATE_NO_WINDOW
+            )
+            print(f"[WinCtrl] Night mode {'enabled' if enable else 'disabled'}")
+        except Exception as e:
+            print(f"[WinCtrl] toggle_night_mode error: {e}")
+
+    def sleep_pc(self):
+        """Put the PC to sleep immediately."""
+        subprocess.Popen(
+            ["rundll32.exe", "powrprof.dll,SetSuspendState", "0,1,0"],
+            creationflags=subprocess.CREATE_NO_WINDOW
+        )
+        print("[WinCtrl] Sleeping...")
 
     # ── END ADDED ──────────────────────────────────────────────────────────
