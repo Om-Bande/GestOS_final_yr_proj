@@ -42,7 +42,7 @@ This project is built using some awesome, modern programming tools:
 
 ---
 
-## 🎮 Installation (Kid-Friendly Guide!)
+## 🎮 Installation 
 
 Ready to set up your magic computer controller? Ask an adult to help you with these steps!
 
