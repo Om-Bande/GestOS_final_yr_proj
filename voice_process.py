@@ -92,8 +92,62 @@ COMMAND_MAP: dict[str, tuple[str, dict]] = {
 
     # ── ADDED: Close foreground window ─────────────────────────────────────
     # Closes whatever window is currently active — safer than killing process
-    "close tab":                ("close_window",   {}),
+    "close tab":                ("close_tab",   {}),
     "close window":             ("close_window",   {}),
+
+    # ── ADDED: VLC open/close ──────────────────────────────────────────────
+    "open vlc":                 ("open_app",       {"app": "vlc"}),
+    "close vlc":                ("close_app",      {"app": "vlc"}),
+
+    # ── ADDED: VLC media controls (voice) ──────────────────────────────────
+    # Fist gesture also triggers play/pause (handled in vision_process.py)
+    "play":                     ("vlc_play_pause", {}),
+    "pause":                    ("vlc_play_pause", {}),
+    "play pause":               ("vlc_play_pause", {}),
+    "next":                     ("vlc_next",       {}),
+    "next track":               ("vlc_next",       {}),
+    "previous":                 ("vlc_previous",   {}),
+    "previous track":           ("vlc_previous",   {}),
+    "stop media":               ("vlc_stop",       {}),
+
+    # ── ADDED: WiFi ────────────────────────────────────────────────────────
+    "wifi on":                  ("wifi_on",        {}),
+    "wifi off":                 ("wifi_off",       {}),
+    "turn on wifi":             ("wifi_on",        {}),
+    "turn off wifi":            ("wifi_off",       {}),
+
+    # ── ADDED: Bluetooth ───────────────────────────────────────────────────
+    "bluetooth on":             ("bluetooth_on",   {}),
+    "bluetooth off":            ("bluetooth_off",  {}),
+    "turn on bluetooth":        ("bluetooth_on",   {}),
+    "turn off bluetooth":       ("bluetooth_off",  {}),
+
+    # ── ADDED: Night mode ──────────────────────────────────────────────────
+    "night mode on":            ("night_mode_on",  {}),
+    "night mode off":           ("night_mode_off", {}),
+    "dark mode on":             ("night_mode_on",  {}),
+    "dark mode off":            ("night_mode_off", {}),
+
+    # ── ADDED: System commands (shutdown/restart/lock/sleep/stop) ──────────
+    "shutdown":                 ("shutdown_request", {}),
+    "restart":                  ("restart_request",  {}),
+    "sleep":                    ("sleep_request",    {}),
+    "lock":                     ("lock",             {}),
+    "lock screen":              ("lock",             {}),
+    "stop program":             ("stop_program",     {}),
+    "confirm":                  ("confirm",          {}),
+    "cancel":                   ("cancel",           {}),
+
+    # Tab management (Chrome, Brave, any browser)
+    "new tab":              ("new_tab",     {}),
+    "next tab":             ("next_tab",    {}),
+    "previous tab":         ("prev_tab",    {}),
+    "reopen tab":           ("reopen_tab",  {}),
+
+    # Dictation (Win+H toggles Windows voice typing)
+    "start dictation":      ("dictation",   {}),
+    "start writing":      ("dictation",   {}),
+    "stop dictation":       ("dictation",   {}),
     # ── END ADDED ──────────────────────────────────────────────────────────
 }
 
