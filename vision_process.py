@@ -48,6 +48,8 @@ CAM_Y_MAX = 0.80   # bottom edge
 
 # ── ADDED: Both-hand open palm gesture constant ────────────────────────────
 OPEN_PALM_HOLD_S = 2.0    # hold both hands open palm this long → shutdown/restart trigger
+# ── ADDED: Fist gesture constant ──────────────────────────────────────────
+FIST_HOLD_S      = 0.30   # hold fist this long → VLC play/pause
 # ── END ADDED ──────────────────────────────────────────────────────────────
 
 
@@ -119,10 +121,12 @@ def vision_process_entry(
     last_voice_t = 0.0
 
     # ── ADDED: Both-hand open palm state + countdown display ───────────────
-    both_palm_start_t: float | None = None  # when both-palm pose was first detected
-    both_palm_fired   = False               # True once shutdown_request is sent, rearms on release
-
-    countdown_text = ""   # text shown in center of frame e.g. "SHUTDOWN: 5"
+    both_palm_start_t: float | None = None
+    both_palm_fired   = False
+    countdown_text = ""
+    # ── ADDED: Fist gesture state (VLC play/pause) ─────────────────────────
+    fist_start_t: float | None = None
+    fist_fired        = False
     # ── END ADDED ──────────────────────────────────────────────────────────
 
     print("[Vision] Started.")
@@ -300,14 +304,38 @@ def vision_process_entry(
 
         if both_palms_detected:
             if both_palm_start_t is None:
-                both_palm_start_t = now   # start timing the hold
+                both_palm_start_t = now
             elif not both_palm_fired and (now - both_palm_start_t) >= OPEN_PALM_HOLD_S:
-                _put(intent_queue, "shutdown_request")   # send trigger to main
+                _put(intent_queue, "shutdown_request")
                 both_palm_fired = True
         else:
-            # Hands lowered or not both open — reset so gesture can fire again
             both_palm_start_t = None
             both_palm_fired   = False
+        # ── END ADDED ──────────────────────────────────────────────────────
+
+        # ── ADDED: Fist gesture detection (VLC play/pause) ────────────────
+        # All 4 fingers curled = fist. Hold FIST_HOLD_S → vlc_play_pause.
+        # Only fires on one hand (primary hand from single-hand results).
+        # Re-arms when fist is released.
+        fist_detected = False
+        if results.multi_hand_landmarks:
+            lm_f = results.multi_hand_landmarks[0].landmark
+            fist_detected = (
+                lm_f[8].y  > lm_f[6].y  and   # index down
+                lm_f[12].y > lm_f[10].y and   # middle down
+                lm_f[16].y > lm_f[14].y and   # ring down
+                lm_f[20].y > lm_f[18].y        # pinky down
+            )
+
+        if fist_detected:
+            if fist_start_t is None:
+                fist_start_t = now
+            elif not fist_fired and (now - fist_start_t) >= FIST_HOLD_S:
+                _put(intent_queue, "vlc_play_pause")
+                fist_fired = True
+        else:
+            fist_start_t = None
+            fist_fired   = False
         # ── END ADDED ──────────────────────────────────────────────────────
 
         # ── Draw overlay on frame ──────────────────────────────────────────
